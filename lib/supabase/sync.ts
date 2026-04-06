@@ -1,19 +1,13 @@
 import { getSupabase, isSupabaseEnabled } from "./client";
-import { dbGetPendingOrders, dbUpdateSyncStatus } from "@/lib/db";
+import { dbGetAllOrders, dbUpdateSyncStatus } from "@/lib/db";
 import type { Order } from "@/lib/types";
 
-/**
- * Get or create an anonymous Supabase session.
- * Lets the app sync without requiring the owner to create an account.
- * The anonymous user ID is stable per device.
- */
 async function ensureSession(): Promise<string | null> {
   const sb = getSupabase();
   if (!sb) return null;
   try {
     const { data: { user } } = await sb.auth.getUser();
     if (user) return user.id;
-    // No session — sign in anonymously (no signup needed)
     const { data, error } = await sb.auth.signInAnonymously();
     if (error || !data.user) return null;
     return data.user.id;
@@ -22,11 +16,6 @@ async function ensureSession(): Promise<string | null> {
   }
 }
 
-/**
- * Sync a single order to Supabase.
- * Uses anonymous auth — no signup required, data isolated per device.
- * All money stored as INTEGER paise (no float rounding).
- */
 export async function syncOrder(order: Order): Promise<boolean> {
   const sb = getSupabase();
   if (!sb) return false;
@@ -64,7 +53,8 @@ export async function syncOrder(order: Order): Promise<boolean> {
 export async function backgroundSync(): Promise<void> {
   if (!isSupabaseEnabled()) return;
   try {
-    const pending = await dbGetPendingOrders();
+    const allOrders = await dbGetAllOrders();
+    const pending = allOrders.filter(o => o.syncStatus === "pending");
     for (const order of pending) {
       await syncOrder(order);
     }
