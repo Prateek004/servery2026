@@ -34,7 +34,10 @@ export const useStore = create<AppState>((set, get) => ({
     const { addOns = [], portion, barUnit } = opts;
     const state = get();
     const fp = addOnFP(addOns) + (portion?.id ?? '') + (barUnit ?? '');
-    const idx = state.cart.findIndex(c => c.menuItemId === item.id && addOnFP(c.selectedAddOns) + (c.selectedPortion?.id ?? '') + (c.barUnit ?? '') === fp);
+    const idx = state.cart.findIndex(c =>
+      c.menuItemId === item.id &&
+      addOnFP(c.selectedAddOns) + (c.selectedPortion?.id ?? '') + (c.barUnit ?? '') === fp
+    );
     if (idx >= 0) {
       set({ cart: state.cart.map((c, i) => i === idx ? { ...c, qty: c.qty + 1 } : c) });
     } else {
