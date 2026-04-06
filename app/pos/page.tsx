@@ -9,6 +9,7 @@ import { generateKOTText, printFallback } from '@/lib/utils/print';
 import CheckoutModal from '@/components/pos/CheckoutModal';
 import ServiceModeSelector from '@/components/pos/ServiceModeSelector';
 import AppShell from '@/components/ui/AppShell';
+import { dbGetAvailableMenuItems, dbGetAllCategories, dbGetAllTables, dbGetAllMenuItems } from '@/lib/db';
 
 type PickerState = { item: MenuItem; addOns: AddOn[]; portion?: Portion; barUnit?: BarUnit } | null;
 
@@ -27,8 +28,7 @@ export default function POSPage() {
   useEffect(() => { loadData(); }, []);
 
   const loadData = async () => {
-    const [cats, items, tbls] = await Promise.all([dbGetAllCategories(), dbGetAvailableMenuItems(), dbGetAllTables()]);
-    setCategories(cats);
+const [cats, items, tbls] = await Promise.all([dbGetAllCategories(), dbGetAllMenuItems(), dbGetAllTables()]);    setCategories(cats);
     setProducts(items);
     setTables(tbls);
   };
