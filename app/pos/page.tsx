@@ -1,15 +1,15 @@
 'use client';
 import { useEffect, useState } from 'react';
 import { useStore } from '@/lib/store';
-import { dbGetAvailableMenuItems, dbGetAllCategories, dbGetAllTables, dbSaveTable } from '@/lib/db';
-import { Plus, ShoppingCart, Minus, Trash2, X, Send, UtensilsCrossed, Package } from 'lucide-react';
+import { useApp } from '@/lib/store/AppContext';
+import { dbGetAllMenuItems, dbGetAllCategories, dbGetAllTables } from '@/lib/db';
+import { Plus, ShoppingCart, Minus, Trash2, X, Send, UtensilsCrossed } from 'lucide-react';
 import type { MenuItem, MenuCategory, AddOn, Portion, BarUnit, Table } from '@/lib/types';
-import { fmtRupee, QUICK_CASH } from '@/lib/utils';
+import { fmtRupee } from '@/lib/utils';
 import { generateKOTText, printFallback } from '@/lib/utils/print';
 import CheckoutModal from '@/components/pos/CheckoutModal';
 import ServiceModeSelector from '@/components/pos/ServiceModeSelector';
 import AppShell from '@/components/ui/AppShell';
-import { dbGetAvailableMenuItems, dbGetAllCategories, dbGetAllTables, dbGetAllMenuItems } from '@/lib/db';
 
 type PickerState = { item: MenuItem; addOns: AddOn[]; portion?: Portion; barUnit?: BarUnit } | null;
 
@@ -23,18 +23,25 @@ export default function POSPage() {
   const [picker, setPicker] = useState<PickerState>(null);
   const [showTables, setShowTables] = useState(false);
 
-  const { cart, addToCart, updateCartItem, removeFromCart, business, serviceMode, currentTable, setCurrentTable } = useStore();
+  const { cart, addToCart, updateCartItem, removeFromCart, serviceMode, currentTable, setCurrentTable } = useStore();
+  const { state } = useApp();
+  const business = state.business;
+
+  const barMode = business?.barModeEnabled;
+  const portionsEnabled = business?.portionsEnabled;
 
   useEffect(() => { loadData(); }, []);
 
   const loadData = async () => {
-const [cats, items, tbls] = await Promise.all([dbGetAllCategories(), dbGetAllMenuItems(), dbGetAllTables()]);    setCategories(cats);
+    const [cats, items, tbls] = await Promise.all([
+      dbGetAllCategories(),
+      dbGetAllMenuItems(),
+      dbGetAllTables(),
+    ]);
+    setCategories(cats);
     setProducts(items);
     setTables(tbls);
   };
-
-  const barMode = business?.barModeEnabled;
-  const portionsEnabled = business?.portionsEnabled;
 
   const filtered = selCat === 'all' ? products
     : selCat === '__bar__' ? products.filter(p => p.isBarItem)
@@ -47,7 +54,7 @@ const [cats, items, tbls] = await Promise.all([dbGetAllCategories(), dbGetAllMen
 
   const handleProductClick = (p: MenuItem) => {
     const hasAddOns = p.addOns?.length > 0;
-    const hasPortions = portionsEnabled && p.portions?.length > 0;
+    const hasPortions = portionsEnabled && (p.portions?.length ?? 0) > 0;
     const hasBarUnits = barMode && p.isBarItem && p.barUnits;
     if (hasAddOns || hasPortions || hasBarUnits) {
       setPicker({ item: p, addOns: [], portion: undefined, barUnit: undefined });
@@ -68,11 +75,6 @@ const [cats, items, tbls] = await Promise.all([dbGetAllCategories(), dbGetAllMen
     printFallback(text);
   };
 
-  const handleTableSelect = async (t: Table) => {
-    setCurrentTable(t.tableNumber);
-    setShowTables(false);
-  };
-
   const catTabs = [
     { id: 'all', name: 'All' },
     ...(barMode ? [{ id: '__bar__', name: '🍺 Bar' }] : []),
@@ -82,7 +84,6 @@ const [cats, items, tbls] = await Promise.all([dbGetAllCategories(), dbGetAllMen
   return (
     <AppShell>
       <div className="flex h-full">
-        {/* ── Main area ── */}
         <div className="flex-1 flex flex-col overflow-hidden">
           {/* Header */}
           <div className="bg-white border-b px-4 py-2.5 flex items-center justify-between gap-2">
@@ -140,7 +141,7 @@ const [cats, items, tbls] = await Promise.all([dbGetAllCategories(), dbGetAllMen
                         <Plus size={12} strokeWidth={3} />
                       </span>
                     </div>
-                    {(p.addOns?.length > 0 || (portionsEnabled && p.portions?.length > 0)) && (
+                    {(p.addOns?.length > 0 || (portionsEnabled && (p.portions?.length ?? 0) > 0)) && (
                       <p className="text-[10px] text-gray-400 mt-1">+ options</p>
                     )}
                   </button>
@@ -150,7 +151,7 @@ const [cats, items, tbls] = await Promise.all([dbGetAllCategories(), dbGetAllMen
           </div>
         </div>
 
-        {/* ── Desktop cart sidebar ── */}
+        {/* Desktop cart sidebar */}
         <div className="hidden lg:flex w-80 border-l bg-white flex-col">
           <CartSidebar cart={cart} total={total} subtotal={subtotal} gst={gst} gstPct={business?.gstPercent}
             updateCartItem={updateCartItem} removeFromCart={removeFromCart}
@@ -192,7 +193,10 @@ const [cats, items, tbls] = await Promise.all([dbGetAllCategories(), dbGetAllMen
               <button onClick={() => setShowTables(false)}><X size={18} /></button>
             </div>
             <div className="grid grid-cols-4 gap-2 mb-4">
-              {(business?.tableCount ? Array.from({ length: business.tableCount }, (_, i) => String(i + 1)) : ['1','2','3','4','5','6','7','8']).map(tn => {
+              {(business?.tableCount
+                ? Array.from({ length: business.tableCount }, (_, i) => String(i + 1))
+                : ['1','2','3','4','5','6','7','8']
+              ).map(tn => {
                 const t = tables.find(x => x.tableNumber === tn);
                 return (
                   <button key={tn} onClick={() => { setCurrentTable(tn); setShowTables(false); }}
@@ -216,7 +220,6 @@ const [cats, items, tbls] = await Promise.all([dbGetAllCategories(), dbGetAllMen
           <div className="w-full lg:max-w-sm bg-white rounded-t-2xl lg:rounded-2xl p-5 max-h-[85vh] overflow-y-auto">
             <h3 className="font-black text-gray-900 text-lg mb-4">{picker.item.name}</h3>
 
-            {/* Bar units */}
             {barMode && picker.item.isBarItem && picker.item.barUnits && (
               <div className="mb-4">
                 <p className="text-xs font-bold text-gray-500 uppercase mb-2">Unit</p>
@@ -231,8 +234,7 @@ const [cats, items, tbls] = await Promise.all([dbGetAllCategories(), dbGetAllMen
               </div>
             )}
 
-            {/* Portions */}
-            {portionsEnabled && picker.item.portions?.length > 0 && (
+            {portionsEnabled && (picker.item.portions?.length ?? 0) > 0 && (
               <div className="mb-4">
                 <p className="text-xs font-bold text-gray-500 uppercase mb-2">Portion</p>
                 <div className="space-y-2">
@@ -246,17 +248,18 @@ const [cats, items, tbls] = await Promise.all([dbGetAllCategories(), dbGetAllMen
               </div>
             )}
 
-            {/* Add-ons */}
-            {picker.item.addOns?.length > 0 && (
+            {(picker.item.addOns?.length ?? 0) > 0 && (
               <div className="mb-4">
                 <p className="text-xs font-bold text-gray-500 uppercase mb-2">Add-ons</p>
                 <div className="space-y-2">
                   {picker.item.addOns.map(ao => {
                     const checked = picker.addOns.some(a => a.id === ao.id);
                     return (
-                      <button key={ao.id} onClick={() => setPicker(p => p ? { ...p, addOns: checked ? p.addOns.filter(a => a.id !== ao.id) : [...p.addOns, ao] } : p)}
+                      <button key={ao.id}
+                        onClick={() => setPicker(p => p ? { ...p, addOns: checked ? p.addOns.filter(a => a.id !== ao.id) : [...p.addOns, ao] } : p)}
                         className={`w-full flex justify-between px-3 py-2.5 rounded-xl border-2 font-bold text-sm press ${checked ? 'border-primary-500 bg-primary-50' : 'border-gray-200'}`}>
-                        <span>{ao.name}</span><span className={checked ? 'text-primary-600' : 'text-gray-600'}>+{fmtRupee(ao.pricePaise)}</span>
+                        <span>{ao.name}</span>
+                        <span className={checked ? 'text-primary-600' : 'text-gray-600'}>+{fmtRupee(ao.pricePaise)}</span>
                       </button>
                     );
                   })}
@@ -277,7 +280,6 @@ const [cats, items, tbls] = await Promise.all([dbGetAllCategories(), dbGetAllMen
   );
 }
 
-// ── Cart Sidebar Component ──────────────────────────────────────────────────────
 function CartSidebar({ cart, total, subtotal, gst, gstPct, updateCartItem, removeFromCart, onCheckout }: any) {
   if (cart.length === 0) return (
     <div className="flex-1 flex items-center justify-center text-gray-400 flex-col gap-2">
