@@ -14,7 +14,7 @@ export class BillmateDB extends Dexie {
     super('billmate_db_v3');
     this.version(1).stores({
       orders: 'id, orderNumber, createdAt, syncStatus',
-      menuItems: 'id, businessId, categoryId, isAvailable, isBarItem',
+      menuItems: 'id, businessId, categoryId, isBarItem',
       categories: 'id, businessId, sortOrder',
       tables: 'id, tableNumber, status',
       rawMaterials: 'id, name',
@@ -42,7 +42,10 @@ export const dbVoidOrder = (id: string, reason: string) =>
 export const dbSaveMenuItem = (i: MenuItem) => db.menuItems.put(i);
 export const dbDeleteMenuItem = (id: string) => db.menuItems.delete(id);
 export const dbGetAllMenuItems = () => db.menuItems.toArray();
-export const dbGetAvailableMenuItems = () => db.menuItems.where('isAvailable').equals(1 as any).toArray();
+export const dbGetAvailableMenuItems = async () => {
+  const all = await db.menuItems.toArray();
+  return all.filter(i => i.isAvailable !== false);
+};
 export const dbBulkSaveMenuItems = (items: MenuItem[]) => db.menuItems.bulkPut(items);
 
 // ── Categories ────────────────────────────────────────────────────────────────
