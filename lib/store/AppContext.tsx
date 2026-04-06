@@ -77,6 +77,14 @@ interface AppContextValue {
 
 const AppContext = createContext<AppContextValue | null>(null);
 
+// ── Helper to sync business into zustand store ─────────────────────────────────
+function syncToZustand(business: BusinessProfile | null) {
+  try {
+    const { useStore } = require("@/lib/store");
+    useStore.getState().setBusiness(business);
+  } catch {}
+}
+
 export function AppProvider({ children }: { children: ReactNode }) {
   const [state, dispatch] = useReducer(reducer, initialState);
 
@@ -86,8 +94,16 @@ export function AppProvider({ children }: { children: ReactNode }) {
         let business: BusinessProfile | null = null;
         const raw = localStorage.getItem("bm_business");
         if (raw) business = JSON.parse(raw) as BusinessProfile;
+
+        // Sync business into zustand on boot so POS/Menu get bar mode etc.
+        if (business) syncToZustand(business);
+
         const db = await import("@/lib/db");
-        const [items, categories, orders] = await Promise.all([db.dbGetAllMenuItems(), db.dbGetAllCategories(), db.dbGetAllOrders()]);
+        const [items, categories, orders] = await Promise.all([
+          db.dbGetAllMenuItems(),
+          db.dbGetAllCategories(),
+          db.dbGetAllOrders(),
+        ]);
         dispatch({ type: "INIT_DONE", business, items, categories, orders });
         if (business) import("@/lib/supabase/sync").then(({ backgroundSync }) => backgroundSync()).catch(() => {});
       } catch {
@@ -101,6 +117,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const profile = { ...b, id: b.id || crypto.randomUUID(), updatedAt: new Date().toISOString() };
     localStorage.setItem("bm_business", JSON.stringify(profile));
     dispatch({ type: "SET_BUSINESS", payload: profile });
+
+    // Sync into zustand so POS/Menu/Settings all see updated bar mode, portions etc.
+    syncToZustand(profile);
+
     const db = await import("@/lib/db");
     const existing = await db.dbGetAllMenuItems();
     if (existing.length === 0) {
@@ -116,7 +136,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const removeFromCart = useCallback((cartId: string) => dispatch({ type: "CART_REMOVE", cartId }), []);
   const clearCart = useCallback(() => dispatch({ type: "CART_CLEAR" }), []);
 
-  const placeOrder = useCallback(async (params: { serviceMode: Order['serviceMode']; tableNumber?: string; paymentMethod: Order["paymentMethod"]; discountType: "flat" | "percent"; discountValue: number; cashReceivedPaise?: number; upiAmountPaise?: number; customerName?: string; customerPhone?: string; }): Promise<Order> => {
+  const placeOrder = useCallback(async (params: {
+    serviceMode: Order['serviceMode']; tableNumber?: string;
+    paymentMethod: Order["paymentMethod"]; discountType: "flat" | "percent";
+    discountValue: number; cashReceivedPaise?: number; upiAmountPaise?: number;
+    customerName?: string; customerPhone?: string;
+  }): Promise<Order> => {
     const { paymentMethod, discountType, discountValue, cashReceivedPaise = 0, upiAmountPaise = 0, customerName, customerPhone, serviceMode, tableNumber } = params;
     const subtotalPaise = state.cart.reduce((s, i) => s + i.unitPricePaise * i.qty, 0);
     const discountPaise = calcDiscount(subtotalPaise, discountType, discountValue);
